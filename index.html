@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
-<title>DermaScan — Eczema Severity Analyzer</title>
+<title>Skin Guard — Eczema Severity Analyzer</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display:ital@0;1&family=DM+Mono:wght@400;500&family=Outfit:wght@300;400;500;600&display=swap" rel="stylesheet"/>
 <style>
@@ -200,13 +200,37 @@ h1 em {
 .api-status.err { background: rgba(239,68,68,.1);  color: #f87171; border: 1px solid rgba(239,68,68,.2); }
 .api-status.idle{ background: rgba(100,116,139,.1);color: var(--text-dim); border: 1px solid var(--border); }
 
-.api-note {
+.save-key-btn, .clear-key-btn {
+  background: none;
+  border-radius: 7px;
   font-size: 12px;
-  color: var(--text-muted);
-  margin-top: 10px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
+  padding: 8px 14px;
+  cursor: pointer;
+  transition: all .2s;
+  white-space: nowrap;
+  font-family: var(--sans);
+}
+.save-key-btn {
+  background: rgba(59,130,246,.15);
+  border: 1px solid rgba(59,130,246,.3);
+  color: var(--accent2);
+}
+.save-key-btn:hover {
+  background: rgba(59,130,246,.28);
+  border-color: var(--accent);
+}
+.clear-key-btn {
+  background: rgba(239,68,68,.08);
+  border: 1px solid rgba(239,68,68,.2);
+  color: #f87171;
+  padding: 8px 10px;
+}
+.clear-key-btn:hover {
+  background: rgba(239,68,68,.18);
+}
+.clear-key-btn:disabled, .save-key-btn:disabled {
+  opacity: .35;
+  cursor: not-allowed;
 }
 
 /* ═══════════════════════════════════════════
@@ -674,7 +698,7 @@ footer a:hover { color: var(--text); }
       <div class="badge-dot"></div>
       AI-Powered Dermatology Tool
     </div>
-    <h1>Derma<em>Scan</em></h1>
+    <h1>Skin <em>Guard</em></h1>
     <p class="subtitle">
       Upload a skin image to receive an instant eczema severity assessment
       powered by Claude Vision AI, graded on a clinical 0–20 scale.
@@ -696,11 +720,17 @@ footer a:hover { color: var(--text); }
       <input type="password" id="apiKey" placeholder="sk-ant-api03-..." autocomplete="off"/>
       <button class="eye-btn" onclick="toggleKey()" title="Show/hide key">👁</button>
     </div>
+    <button class="save-key-btn" id="saveKeyBtn" onclick="saveKey()" title="Save key to browser">
+      💾 Save
+    </button>
+    <button class="clear-key-btn" id="clearKeyBtn" onclick="clearKey()" title="Remove saved key">
+      ✕
+    </button>
     <div class="api-status idle" id="apiStatus">Not verified</div>
   </div>
   <p class="api-note" style="margin-top:-14px;margin-bottom:20px;padding:0 4px;">
     <span>🔒</span>
-    Your key is used directly in the browser and never stored or sent to any server.
+    Key is saved in your browser's localStorage — never sent to any server.
     Get a key at <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>
   </p>
 
@@ -800,7 +830,7 @@ footer a:hover { color: var(--text); }
 
   <!-- ── FOOTER ───────────────────────────────── -->
   <footer>
-    <p>DermaScan · Powered by Claude claude-opus-4-6 Vision API · For research use only</p>
+    <p>Skin Guard · Powered by Claude claude-opus-4-6 Vision API · For research use only</p>
     <p style="margin-top:8px">
       <a href="https://github.com" target="_blank">GitHub</a> ·
       <a href="https://console.anthropic.com" target="_blank">Anthropic Console</a>
@@ -925,30 +955,80 @@ function loadFile(file) {
 }
 
 // ═══════════════════════════════════════════════════════════
-//  API KEY
+//  API KEY  — with localStorage persistence
 // ═══════════════════════════════════════════════════════════
+const LS_KEY = "skinguard_api_key";
+
 function toggleKey() {
   const inp = document.getElementById("apiKey");
   inp.type  = inp.type === "password" ? "text" : "password";
 }
 
-document.getElementById("apiKey").addEventListener("input", () => {
-  checkReady();
+function saveKey() {
   const key = document.getElementById("apiKey").value.trim();
+  if (!key) return;
+  localStorage.setItem(LS_KEY, key);
+  showKeyToast("✓ Key saved to browser");
+  updateKeyUI(key);
+}
+
+function clearKey() {
+  localStorage.removeItem(LS_KEY);
+  document.getElementById("apiKey").value = "";
+  updateKeyUI("");
+  showKeyToast("Key removed");
+}
+
+function showKeyToast(msg) {
+  const st = document.getElementById("apiStatus");
+  const prev = st.className + "|" + st.textContent;
+  st.className = "api-status ok"; st.textContent = msg;
+  setTimeout(() => {
+    const key = document.getElementById("apiKey").value.trim();
+    updateKeyUI(key);
+  }, 2000);
+}
+
+function updateKeyUI(key) {
   const st  = document.getElementById("apiStatus");
+  const clr = document.getElementById("clearKeyBtn");
+  const sav = document.getElementById("saveKeyBtn");
+  const saved = localStorage.getItem(LS_KEY);
+
   if (!key) {
-    st.className = "api-status idle"; st.textContent = "Not set";
+    st.className = "api-status idle";
+    st.textContent = saved ? "⚠ Key cleared (was saved)" : "Not set";
   } else if (key.startsWith("sk-ant-")) {
-    st.className = "api-status ok";   st.textContent = "✓ Key format valid";
+    const isSaved = saved === key;
+    st.className = "api-status ok";
+    st.textContent = isSaved ? "✓ Key saved & valid" : "✓ Key format valid";
   } else {
-    st.className = "api-status err";  st.textContent = "⚠ Invalid format";
+    st.className = "api-status err";
+    st.textContent = "⚠ Invalid format";
+  }
+
+  clr.disabled = !saved;
+  checkReady();
+}
+
+// Load saved key on page start
+window.addEventListener("DOMContentLoaded", () => {
+  const saved = localStorage.getItem(LS_KEY);
+  if (saved) {
+    document.getElementById("apiKey").value = saved;
+    updateKeyUI(saved);
+  } else {
+    document.getElementById("clearKeyBtn").disabled = true;
   }
 });
 
+document.getElementById("apiKey").addEventListener("input", () => {
+  updateKeyUI(document.getElementById("apiKey").value.trim());
+});
+
 function checkReady() {
-  const key  = document.getElementById("apiKey").value.trim();
-  const btn  = document.getElementById("analyzeBtn");
-  btn.disabled = !(selectedB64 && key.startsWith("sk-ant-"));
+  const key = document.getElementById("apiKey").value.trim();
+  document.getElementById("analyzeBtn").disabled = !(selectedB64 && key.startsWith("sk-ant-"));
 }
 
 // ═══════════════════════════════════════════════════════════
